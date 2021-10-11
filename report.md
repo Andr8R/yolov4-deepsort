@@ -1,6 +1,24 @@
+# This is short report about car tracking task.
+
+Original repository (https://github.com/theAIGuysCode/yolov4-deepsort.git) allows to use pretrained YOLO object detector together with DeepSORT tracking. In addition to that, optical flow tracking was added. 
+All testing videos, together with outputs, can be found on my Google Drive: https://drive.google.com/drive/folders/1pSz4EOAML0Z0eK-JtM0flXgCYV-c0ru2?usp=sharing
+After installation and model convertation, you can simply run the code with next command:
+
+```
+python object_tracker_new.py --video ./videos/cut3.mp4 --output ./outputs/car_cut3_of_mult_25.avi --optical_flow True
+```
+
+Last argument is needed if you wand to see optical flow motion visualisation.
+
+YOLO object detection is the main part for car detection, and only when object bounding boxes from it are available, the object tracking process can be started.
+
+DeepSORT algorithm combines Kalman Filter technics together with metrica that includes Mahalanobis distance and appearance distance 
+
+
+
+
 # yolov4-deepsort
-[![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1zmeSTP3J5zu2d5fHgsQC06DyYEYJFXq1?usp=sharing)
+
 
 Object tracking implemented with YOLOv4, DeepSort, and TensorFlow. YOLOv4 is a state of the art algorithm that uses deep convolutional neural networks to perform object detections. We can take the output of YOLOv4 feed these object detections into Deep SORT (Simple Online and Realtime Tracking with a Deep Association Metric) in order to create a highly accurate object tracker.
 

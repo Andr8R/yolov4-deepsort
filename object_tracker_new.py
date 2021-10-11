@@ -226,7 +226,7 @@ def main(_argv):
             inverted_crop_img[miny:maxy,minx:maxx,:] = 255
 
 
-            if True and track.time_since_update <=3:
+            if FLAGS.optical_flow and track.time_since_update <=3:
                 # for first frame:
                 frame_cop = frame.copy()
                 # print(track.track_id, track.age, track.state)
@@ -237,7 +237,7 @@ def main(_argv):
                     # track.prev = cv2.goodFeaturesToTrack(track.prev_gray, mask=track.mask_gray, **feature_params)
                     track.mask = np.zeros_like(frame_cop)
                 elif track.state == 2:
-                    print(track.track_id)
+                    # print(track.track_id)
                     gray = cv2.cvtColor(frame_cop, cv2.COLOR_BGR2GRAY)
                     track.mask_gray = cv2.cvtColor(inverted_crop_img, cv2.COLOR_BGR2GRAY)
                     # Calculates sparse optical flow by Lucas-Kanade method

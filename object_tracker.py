@@ -218,14 +218,8 @@ def main(_argv):
             inverted_crop_img[miny:maxy,minx:maxx,:] = 255
             break
 
-        # print(type(inverted_crop_img), inverted_crop_img.shape)
-        # inverted_crop_img = inverted_crop_img.astype(np.uint8)
-        # print(type(inverted_crop_img))
-        #
-        # inv_show = cv2.resize(inverted_crop_img, (960, 540))  # Resize image
-        # cv2.imshow("Output Video", inv_show)
-        # if FLAGS.optical_flow:
-        if True:
+        if FLAGS.optical_flow:
+        # if True:
             #for first frame:
             if frame_num==1:
                 prev_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)

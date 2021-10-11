@@ -29,7 +29,7 @@ flags.DEFINE_string('weights', './checkpoints/yolov4-416',
 flags.DEFINE_integer('size', 416, 'resize images to')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
-flags.DEFINE_string('video', './data/video/test.mp4', 'path to input video or set to 0 for webcam')
+flags.DEFINE_string('video', './videos/cut1.mp4', 'path to input video or set to 0 for webcam')
 flags.DEFINE_string('output', None, 'path to output video')
 flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
 flags.DEFINE_float('iou', 0.45, 'iou threshold')
@@ -37,6 +37,8 @@ flags.DEFINE_float('score', 0.50, 'score threshold')
 flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
+flags.DEFINE_boolean('optical_flow', False, 'use optical flow tracking')
+
 
 def main(_argv):
     # Definition of the parameters
@@ -59,7 +61,7 @@ def main(_argv):
     STRIDES, ANCHORS, NUM_CLASS, XYSCALE = utils.load_config(FLAGS)
     input_size = FLAGS.size
     video_path = FLAGS.video
-
+    # video_path = 'videos/cut1.mp4'
     # load tflite model if flag is set
     if FLAGS.framework == 'tflite':
         interpreter = tf.lite.Interpreter(model_path=FLAGS.weights)
@@ -91,6 +93,14 @@ def main(_argv):
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
     frame_num = 0
+
+    # Parameters for Shi-Tomasi corner detection
+    feature_params = dict(maxCorners=300, qualityLevel=0.2, minDistance=2, blockSize=7)
+    # Parameters for Lucas-Kanade optical flow
+    lk_params = dict(winSize=(15, 15), maxLevel=2, criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    # Variable for color to draw optical flow track
+    color_opt = (0, 255, 0)
+
     # while video is running
     while True:
         return_value, frame = vid.read()
@@ -160,7 +170,7 @@ def main(_argv):
         allowed_classes = list(class_names.values())
         
         # custom allowed classes (uncomment line below to customize tracker for only people)
-        #allowed_classes = ['person']
+        allowed_classes = ['car']
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
         names = []
@@ -194,7 +204,68 @@ def main(_argv):
         scores = np.array([d.confidence for d in detections])
         classes = np.array([d.class_name for d in detections])
         indices = preprocessing.non_max_suppression(boxs, classes, nms_max_overlap, scores)
-        detections = [detections[i] for i in indices]       
+        detections = [detections[i] for i in indices]
+
+        #####################
+
+        inverted_crop_img = np.zeros_like(frame)
+
+        for d in detections:
+            minx, miny, maxx, maxy = d.to_tlbr()
+            pad_size = 0
+            minx, miny, maxx, maxy = max(int(minx - pad_size), 0), max(int(miny - pad_size), 0), int(maxx + pad_size), int(maxy + pad_size)
+            # inverted_crop_img[miny:maxy,minx:maxx,:] = frame[miny:maxy,minx:maxx,:]
+            inverted_crop_img[miny:maxy,minx:maxx,:] = 255
+            break
+
+        # print(type(inverted_crop_img), inverted_crop_img.shape)
+        # inverted_crop_img = inverted_crop_img.astype(np.uint8)
+        # print(type(inverted_crop_img))
+        #
+        # inv_show = cv2.resize(inverted_crop_img, (960, 540))  # Resize image
+        # cv2.imshow("Output Video", inv_show)
+        # if FLAGS.optical_flow:
+        if True:
+            #for first frame:
+            if frame_num==1:
+                prev_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                mask_gray = cv2.cvtColor(inverted_crop_img, cv2.COLOR_BGR2GRAY)
+                prev = cv2.goodFeaturesToTrack(prev_gray, mask=mask_gray, **feature_params)
+                mask = np.zeros_like(frame)
+            elif frame_num>1:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                mask_gray = cv2.cvtColor(inverted_crop_img, cv2.COLOR_BGR2GRAY)
+                # Calculates sparse optical flow by Lucas-Kanade method
+                # https://docs.opencv.org/3.0-beta/modules/video/doc/motion_analysis_and_object_tracking.html#calcopticalflowpyrlk
+                prev = cv2.goodFeaturesToTrack(prev_gray, mask=mask_gray, **feature_params)
+                next, status, error = cv2.calcOpticalFlowPyrLK(prev_gray, gray, prev, None, **lk_params)
+                # Selects good feature points for previous position
+                good_old = prev[status == 1].astype(int)
+                # Selects good feature points for next position
+                good_new = next[status == 1].astype(int)
+                # Draws the optical flow tracks
+                for i, (new, old) in enumerate(zip(good_new, good_old)):
+                    # Returns a contiguous flattened array as (x, y) coordinates for new point
+                    a, b = new.ravel()
+                    # Returns a contiguous flattened array as (x, y) coordinates for old point
+                    c, d = old.ravel()
+                    # Draws line between new and old position with green color and 2 thickness
+                    mask = cv2.line(mask, (a, b), (c, d), color_opt, 2)
+                    # Draws filled circle (thickness of -1) at new position with green color and radius of 3
+                    frame = cv2.circle(frame, (a, b), 3, color_opt, -1)
+                # Overlays the optical flow tracks on the original frame
+                frame = cv2.add(frame, mask)
+                # Updates previous frame
+                prev_gray = gray.copy()
+                # Updates previous good feature points
+                prev = good_new.reshape(-1, 1, 2)
+                # Opens a new window and displays the output frame
+                # cv2.imshow("sparse optical flow", output)
+                # # Frames are read by intervals of 10 milliseconds. The programs breaks out of the while loop when the user presses the 'q' key
+                # if cv.waitKey(10) & 0xFF == ord('q'):
+                #     break
+
+        #####################
 
         # Call the tracker
         tracker.predict()
@@ -203,10 +274,23 @@ def main(_argv):
         # update tracks
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
-                continue 
+                continue
             bbox = track.to_tlbr()
             class_name = track.get_class()
-            
+
+            # ################ START CHANGES HERE
+            # minx, miny, maxx, maxy = bbox
+            # box_center = np.array([(minx+maxx)/2, (miny+maxy)/2])
+            #
+            # pad_size = 30
+            # minx, miny, maxx, maxy = max(int(minx - pad_size), 0), max(int(miny - pad_size), 0), int(maxx + pad_size), int(maxy + pad_size)
+            # # croped_image = frame[miny:maxy,minx:maxx,:]
+            # inverted_crop_img = frame.copy()*0
+            # inverted_crop_img[miny:maxy,minx:maxx,:] = frame[miny:maxy,minx:maxx,:]
+            # print(croped_image.shape, box_center)
+
+
+
         # draw bbox on screen
             color = colors[int(track.track_id) % len(colors)]
             color = [i * 255 for i in color]
@@ -224,8 +308,10 @@ def main(_argv):
         result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
+        result_show = cv2.resize(result, (960, 540))                # Resize image
+
         if not FLAGS.dont_show:
-            cv2.imshow("Output Video", result)
+            cv2.imshow("Output Video", result_show)
         
         # if output flag is set, save video file
         if FLAGS.output:
